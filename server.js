@@ -6,12 +6,8 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
 
   'use strict';
 
-  if (process.env.NODE_ENV !== 'development' ||
-    process.env.IS_MIRROR) {
-    return;
-  }
-
-  var path = Npm.require('path'),
+  var _ = Npm.require('lodash'),
+      path = Npm.require('path'),
       FRAMEWORK_NAME = 'cucumber',
       FRAMEWORK_REGEX = FRAMEWORK_NAME + '/.+\\.(feature|js|coffee|litcoffee|coffee\\.md)$',
       featuresRelativePath = path.join(FRAMEWORK_NAME, 'features'),
@@ -22,6 +18,30 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
       regex: FRAMEWORK_REGEX,
       sampleTestGenerator: _getSampleTestFiles
     });
+  }
+
+  if (process.env.MASTER || process.env.SINGLE) {
+    console.log('Velocity master is running');
+    var FRAMEWORK_NAME = 'cucumber';
+    var debouncedReset = _.debounce(Meteor.bindEnvironment(function () {
+      Meteor.call('velocity/reset', function () {
+        Meteor.call('velocity/reports/start', {framework: FRAMEWORK_NAME}, function () {
+        });
+      });
+    }), 100);
+    VelocityTestFiles.find({targetFramework: FRAMEWORK_NAME}).observe({
+      added: debouncedReset,
+      removed: debouncedReset,
+      changed: debouncedReset
+    });
+    if (process.env.MASTER) {
+      return;
+    }
+  }
+
+  if (process.env.NODE_ENV !== 'development' ||
+    process.env.IS_MIRROR) {
+    return;
   }
 
   function _getSampleTestFiles () {
@@ -40,34 +60,47 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
     }];
   }
 
-  var _ = Npm.require('lodash'),
-      Module = Npm.require('module');
+  var Module = Npm.require('module'),
+      velocityDDP;
 
   Meteor.startup(function () {
-    var mirrorId = Meteor.call('velocity/mirrors/request', {
-      framework: 'cucumber'
+
+    velocityDDP = DDP.connect('http://localhost:3005');
+
+    //var mirrorId = Meteor.call('velocity/mirrors/request', {
+    //  framework: 'cucumber'
+    //});
+    //console.log('[cucumber] Waiting for Velocity to start the mirror');
+    //var init = function (mirror) {
+    //  console.log('[cucumber] Mirror started. Watching test files.');
+    //  cucumber.mirror = mirror;
+    var debouncedReRunCucumber = _.debounce(Meteor.bindEnvironment(_rerunCucumber), 500);
+    VelocityTestFiles.find({targetFramework: FRAMEWORK_NAME}).observe({
+      added: debouncedReRunCucumber,
+      removed: debouncedReRunCucumber,
+      changed: debouncedReRunCucumber
     });
-    console.log('[cucumber] Waiting for Velocity to start the mirror');
-    var init = function (mirror) {
-      console.log('[cucumber] Mirror started. Watching test files.');
-      cucumber.mirror = mirror;
-      VelocityTestFiles.find({targetFramework: FRAMEWORK_NAME}).observe({
-        added: _.debounce(Meteor.bindEnvironment(_rerunCucumber)),
-        removed: _.debounce(Meteor.bindEnvironment(_rerunCucumber)),
-        changed: _.debounce(Meteor.bindEnvironment(_rerunCucumber))
-      });
+    //};
+    //VelocityMirrors.find({_id: mirrorId, state: 'ready'}).observe({
+    //  added: init,
+    //  changed: init
+    //});
+    console.log('ROOT_URL', process.env.ROOT_URL);
+    cucumber.mirror = {
+      host: process.env.ROOT_URL,
+      rootUrl: process.env.ROOT_URL
     };
-    VelocityMirrors.find({_id: mirrorId, state: 'ready'}).observe({
-      added: init,
-      changed: init
-    });
+    //_rerunCucumber();
+
   });
 
   function _rerunCucumber (file) {
 
-    DEBUG && console.log('[cucumber] Rerunning cucumber');
+    console.log('[cucumber] Rerunning cucumber');
 
-    delete Module._cache[file.absolutePath];
+    if (file) {
+      delete Module._cache[file.absolutePath];
+    }
 
     var cuke = Npm.require('cucumber');
 
@@ -78,10 +111,10 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
     var formatter = new cuke.Listener.JsonFormatter();
     formatter.log = Meteor.bindEnvironment(function (results) {
 
-      Meteor.call('velocity/reports/reset', {framework: FRAMEWORK_NAME}, function () {
-        var features = JSON.parse(results);
-        _processFeatures(features);
-      });
+      //Meteor.call('velocity/reports/reset', {framework: FRAMEWORK_NAME}, function () {
+      var features = JSON.parse(results);
+      _processFeatures(features);
+      //});
     });
 
     _patchHelpers(cuke, execOptions, configuration);
@@ -90,7 +123,7 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
     runtime.attachListener(configuration.getFormatter());
 
     runtime.start(Meteor.bindEnvironment(function runtimeFinished () {
-      Meteor.call('velocity/reports/completed', {framework: FRAMEWORK_NAME}, function () {
+      velocityDDP.call('velocity/reports/completed', {framework: FRAMEWORK_NAME}, function () {
         DEBUG && console.log('[cucumber] Completed');
       });
     }));
@@ -173,7 +206,7 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
   function _processStep (element, step, feature) {
 
     var report = {
-      id: element.id + step.keyword + step.name,
+      id: element.id + step.keyword + step.name + ' ' + new Date().getTime(),
       framework: FRAMEWORK_NAME,
       name: step.keyword + step.name,
       result: step.result.status,
@@ -200,7 +233,7 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
       return;
     }
 
-    Meteor.call('velocity/reports/submit', report);
+    velocityDDP.call('velocity/reports/submit', report);
     // Unused fields:
     // browser
     // timestamp
@@ -209,8 +242,21 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
   function _getExecOptions () {
 
     // TODO externalize these options
+
+    var featureFiles = [];
+
+    if (!process.env.SINGLE) {
+      _.each(process.env.FILES.split(','), function (file) {
+        featureFiles.push('/Users/sam/WebstormProjects/meteor-testing/velocity-examples/leaderboard-cucumber/tests/cucumber/features/leaderboard' + file + '.feature');
+      });
+    }
+    else {
+      featureFiles.push(featuresPath);
+    }
+
     var options = {
-      files: [featuresPath],
+      files: featureFiles,
+      //files: ['/Users/sam/WebstormProjects/meteor-testing/velocity-examples/leaderboard-cucumber/tests/cucumber/features/leaderboard1.feature'],
       //steps: path.join(featuresPath, 'step_definitions'),
       tags: [],
       format: 'progress' // 'summary' 'json' 'pretty' 'progress'
