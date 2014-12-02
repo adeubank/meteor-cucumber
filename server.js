@@ -65,7 +65,7 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
 
   Meteor.startup(function () {
 
-    velocityDDP = DDP.connect('http://localhost:3005');
+    velocityDDP = DDP.connect(process.env.MASTER_URL);
 
     //var mirrorId = Meteor.call('velocity/mirrors/request', {
     //  framework: 'cucumber'
