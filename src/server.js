@@ -6,17 +6,20 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
 
   'use strict';
 
-  if (process.env.NODE_ENV !== 'development' || process.env.CUCUMBER == '0' ||
-    process.env.IS_MIRROR || process.env.VELOCITY == '0') {
-    return;
-  }
+  //if (process.env.NODE_ENV !== 'development' || process.env.CUCUMBER == '0' ||
+  //  process.env.VELOCITY == '0') {
+  //  return;
+  //}
+
+  console.log('* * * * * * [xolvio:cucumber] Cucumber is loading in', process.env.IS_MIRROR ? 'MIRROR' : 'MAIN');
 
   var path = Npm.require('path'),
       fs = Npm.require('fs'),
       FRAMEWORK_NAME = 'cucumber',
       FRAMEWORK_REGEX = FRAMEWORK_NAME + '/.+\\.(feature|js|coffee|litcoffee|coffee\\.md)$',
       featuresRelativePath = path.join(FRAMEWORK_NAME, 'features'),
-      featuresPath = path.join(Velocity.getTestsPath(), featuresRelativePath);
+      featuresPath = path.join(_getTestsPath(), featuresRelativePath),
+      _velocity;
 
   if (Velocity && Velocity.registerTestingFramework) {
     Velocity.registerTestingFramework(FRAMEWORK_NAME, {
@@ -25,36 +28,54 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
     });
   }
 
+  // Bail if there aren't any features defined yet
   if (!fs.existsSync(featuresPath)) {
     return;
   }
 
-  function _getSampleTestFiles () {
-    return [{
-      path: path.join(featuresRelativePath, 'sample.feature'),
-      contents: Assets.getText(path.join('sample-tests', 'feature.feature'))
-    }, {
-      path: path.join(featuresRelativePath, 'support', 'hooks.js'),
-      contents: Assets.getText(path.join('sample-tests', 'hooks.js'))
-    }, {
-      path: path.join(featuresRelativePath, 'step_definitions', 'sampleSteps.js'),
-      contents: Assets.getText(path.join('sample-tests', 'steps.js'))
-    }, {
-      path: path.join(featuresRelativePath, 'support', 'world.js'),
-      contents: Assets.getText(path.join('sample-tests', 'world.js'))
-    }];
+  // if on the master, just request the mirror workers
+  if (!process.env.IS_MIRROR) {
+    //// TODO make the number of mirrors configurable
+    //Meteor.startup(function () {
+    //  Meteor.call('velocity/mirrors/request', {
+    //    framework: 'cucumber'
+    //  });
+    //});
+    return;
   }
 
-  var Module = Npm.require('module');
+  // when on the mirror, connect to the parent velocity and subscribe
+  if (process.env.IS_MIRROR) {
+    _velocity = DDP.connect(process.env.PARENT_URL);
+    _velocity.onReconnect = function () {
+      //var debouncedRerunCucumber = _.debounce(Meteor.bindEnvironment(_rerunCucumber), 300);
+      var debouncedRerunCucumber = function () {
+        console.log('observed');
+      };
 
-  Meteor.startup(function () {
-    Meteor.call('velocity/mirrors/request', {
-      framework: 'cucumber'
-    });
-    var init = function (mirror) {
-      cucumber.mirror = mirror;
+      console.log('- - - - - - - VelocityTestFiles');
+      console.log(VelocityTestFiles);
 
-      var debouncedRerunCucumber = _.debounce(Meteor.bindEnvironment(_rerunCucumber), 300);
+
+      _velocity.subscribe('VelocityTestFiles', {
+        onReady: function () {
+          console.log('- - - - - - - VelocityTestFiles subscribe callback');
+          console.log(VelocityTestFiles.find().fetch());
+        },
+        onError: function () {
+          console.log('error', arguments)
+        }
+      });
+
+      Meteor.setTimeout(function() {
+        console.log('- - - - - - - after 4 secs');
+        console.log(VelocityTestFiles.find().fetch());
+      }, 4000);
+
+      _velocity.call('velocity/isMirror', function () {
+        console.log('isMirror call', arguments);
+      });
+
 
       VelocityTestFiles.find({targetFramework: FRAMEWORK_NAME}).observe({
         added: debouncedRerunCucumber,
@@ -62,11 +83,10 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
         changed: debouncedRerunCucumber
       });
     };
-    VelocityMirrors.find({framework: 'cucumber', state: 'ready'}).observe({
-      added: init,
-      changed: init
-    });
-  });
+  }
+
+
+  var Module = Npm.require('module');
 
   function _rerunCucumber (file) {
 
@@ -83,7 +103,7 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
     var formatter = new cuke.Listener.JsonFormatter();
     formatter.log = _.once(Meteor.bindEnvironment(function (results) {
 
-      Meteor.call('velocity/reports/reset', {framework: FRAMEWORK_NAME}, function () {
+      _velocity.call('velocity/reports/reset', {framework: FRAMEWORK_NAME}, function () {
         var features = JSON.parse(results);
         _processFeatures(features);
       });
@@ -95,7 +115,7 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
     runtime.attachListener(configuration.getFormatter());
 
     runtime.start(Meteor.bindEnvironment(function runtimeFinished () {
-      Meteor.call('velocity/reports/completed', {framework: FRAMEWORK_NAME}, function () {
+      _velocity.call('velocity/reports/completed', {framework: FRAMEWORK_NAME}, function () {
         DEBUG && console.log('[xolvio:cucumber] Completed');
       });
     }));
@@ -205,7 +225,7 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
       return;
     }
 
-    Meteor.call('velocity/reports/submit', report);
+    _velocity.call('velocity/reports/submit', report);
     // Unused fields:
     // browser
     // timestamp
@@ -242,6 +262,33 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
       execOptions.push(options.format);
     }
     return execOptions;
+  }
+
+
+  function _getSampleTestFiles () {
+    return [{
+      path: path.join(featuresRelativePath, 'sample.feature'),
+      contents: Assets.getText(path.join('sample-tests', 'feature.feature'))
+    }, {
+      path: path.join(featuresRelativePath, 'support', 'hooks.js'),
+      contents: Assets.getText(path.join('sample-tests', 'hooks.js'))
+    }, {
+      path: path.join(featuresRelativePath, 'step_definitions', 'sampleSteps.js'),
+      contents: Assets.getText(path.join('sample-tests', 'steps.js'))
+    }, {
+      path: path.join(featuresRelativePath, 'support', 'world.js'),
+      contents: Assets.getText(path.join('sample-tests', 'world.js'))
+    }];
+  }
+
+
+  function _getAppPath () {
+    return findAppDir();
+  }
+
+
+  function _getTestsPath () {
+    return path.join(_getAppPath(), 'tests');
   }
 
 

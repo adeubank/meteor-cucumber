@@ -17,6 +17,7 @@
   Package.onUse(function (api) {
 
     api.use([
+      'ddp@1.0.14',
       'underscore@1.0.2',
       'http@1.0.9',
       'velocity:core@0.4.5',
@@ -35,7 +36,7 @@
       'sample-tests/world.js'
     ], 'server', {isAsset: true});
 
-    api.addFiles(['server.js'], 'server');
+    api.addFiles(['files.js', 'server.js'], 'server');
 
     api.export('cucumber', 'server');
   });
