@@ -71,11 +71,11 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
 
     Meteor.call('velocity/reports/reset', function () {
       VelocityTestFiles.update({absolutePath: /\.feature$/}, {$set: {testable: true}}, {multi: true});
-      //Meteor.call('velocity/mirrors/request', {
-      //  framework: 'cucumber',
-      //  nodes: process.env.MIRRORS ? parseInt(process.env.MIRRORS) : 1,
-      //  handshake: false
-      //});
+      Meteor.call('velocity/mirrors/request', {
+        framework: 'cucumber',
+        nodes: process.env.MIRRORS ? parseInt(process.env.MIRRORS) : 1,
+        handshake: false
+      });
     });
   }
 
