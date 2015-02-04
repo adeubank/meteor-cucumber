@@ -1,3 +1,4 @@
+#!/bin/sh
 export PORT=5000
 export HOST=http://localhost:5000/
 export ROOT_URL_PATH=
@@ -25,6 +26,7 @@ export XPC_SERVICE_NAME=0
 export SHLVL=1
 export HOME=/Users/sam
 export VELOCITY_DEBUG=1
+export HANDSHAKE=0
 export LOGNAME=sam
 export LC_CTYPE=en_US.UTF-8
 export MOBILE_DDP_URL=http://localhost:3000

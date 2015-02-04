@@ -1,5 +1,4 @@
 DEBUG = !!process.env.VELOCITY_DEBUG;
-DEBUG = true;
 
 (function () {
 
@@ -23,8 +22,6 @@ DEBUG = true;
   });
 
   function _runCucumber () {
-
-    console.log('running');
 
     var feature = _getNextFeature();
     if (!feature) {

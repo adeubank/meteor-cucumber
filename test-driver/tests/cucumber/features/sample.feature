@@ -11,4 +11,5 @@ Feature: One-liner description of this feature
   Scenario:
     Given I am on the home page
     When I navigate to "/"
-    Then I should see the title of "intentional failure"
+    Then I should see the title of "Cucumber Test-Driver"
+

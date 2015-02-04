@@ -41,13 +41,13 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
 
   function _finisher () {
     if (VelocityTestFiles.find({targetFramework: FRAMEWORK_NAME, testable: true}).count() === 0) {
-      //// FIXME need to properly wait for (what?!)
-      //Meteor.setTimeout(function () {
-      //  Meteor.call('velocity/reports/completed', {framework: FRAMEWORK_NAME}, function () {
-      //    //console.log('completing');
-      //    DEBUG && console.log('[xolvio:cucumber] Completed');
-      //  });
-      //}, 1000)
+      // FIXME need to properly wait for (what?!)
+      // FIXME this is happening twice
+      Meteor.setTimeout(function () {
+        Meteor.call('velocity/reports/completed', {framework: FRAMEWORK_NAME}, function () {
+          DEBUG && console.log('[xolvio:cucumber] Completed');
+        });
+      }, 1000)
     }
   }
 
@@ -73,9 +73,9 @@ DEBUG = !!process.env.VELOCITY_DEBUG;
       VelocityTestFiles.update({absolutePath: /\.feature$/}, {$set: {testable: true}}, {multi: true});
       //Meteor.call('velocity/mirrors/request', {
       //  framework: 'cucumber',
-      //  nodes: process.env.MIRRORS ? parseInt(process.env.MIRRORS) : 1
+      //  nodes: process.env.MIRRORS ? parseInt(process.env.MIRRORS) : 1,
+      //  handshake: false
       //});
-
     });
   }
 

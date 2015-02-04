@@ -10,13 +10,13 @@
 
     this.Given(/^I am on the home page$/, function (callback) {
       helper.world.browser.
-        url(helper.world.cucumber.mirror.rootUrl).
+        url(Meteor.absoluteUrl()).
         call(callback);
     });
 
     this.When(/^I navigate to "([^"]*)"$/, function (relativePath, callback) {
       helper.world.browser.
-        url(helper.world.cucumber.mirror.rootUrl + relativePath).
+        url(Meteor.absoluteUrl(relativePath)).
         call(callback);
     });
 

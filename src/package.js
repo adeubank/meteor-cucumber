@@ -19,7 +19,8 @@
     api.use([
       'ddp@1.0.14',
       'underscore@1.0.2',
-      'http@1.0.9',
+      'http@1.0.10',
+      'mongo@1.0.11',
       'velocity:core@0.4.5',
       'velocity:node-soft-mirror@0.2.8',
       'velocity:shim@0.0.3',
@@ -36,7 +37,7 @@
       'sample-tests/world.js'
     ], 'server', {isAsset: true});
 
-    api.addFiles(['files.js', 'server.js'], 'server');
+    api.addFiles(['files.js', 'server-master.js', 'server-mirror.js'], 'server');
 
     api.export('cucumber', 'server');
   });
